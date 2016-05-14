@@ -1,0 +1,11 @@
+{
+  "name": "movies-bot",
+  "description": "Telegram bot listing showing and upcoming movies from Shaw SG",
+  "role": "",
+  "runtime": "nodejs",
+  "handler": "main.default",
+  "hooks": {
+    "build": "../../node_modules/.bin/browserify --node -s default -t babelify -o main.js index.js",
+    "clean": "rm -f main.js"
+  }
+}
