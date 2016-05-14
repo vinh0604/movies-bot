@@ -1,8 +1,9 @@
 {
   "name": "movies-bot",
   "description": "Telegram bot listing showing and upcoming movies from Shaw SG",
-  "role": "",
-  "runtime": "nodejs",
+  "role": "arn:aws:iam::623305565440:role/lambda_basic_execution",
+  "runtime": "nodejs4.3",
+  "timeout": 30,
   "handler": "main.default",
   "hooks": {
     "build": "../../node_modules/.bin/browserify --node -s default -t babelify -o main.js index.js",

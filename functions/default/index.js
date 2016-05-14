@@ -13,15 +13,18 @@ function getHtml(url) {
 
 function extractMovieInfo(html) {
   let $ = cheerio.load(html)
-  let title = $.find("#rhs_block ._B5d").text()
-  let summary = $.find("#rhs_block ._Fng")
-  let reviews = $.find("#rhs_block ._Fng").map(function (el) {
+  let title = $("#rhs_block ._B5d").text()
+  let summary = $("#rhs_block ._tXc").text()
+  let reviews = $("#rhs_block ._Fng").map(function () {
+    let el = $(this)
+    let link = el.find(".fl").attr("href")
+
     return {
-      page: $(el).find(".fl").text(),
-      rate: $(el).text().split("·")[0],
-      link: $(el).find(".fl").attr("href")
+      page: el.find(".fl").text(),
+      rate: el.contents()[0].data,
+      link: link.startsWith("/url") ? `https://www/google.com.sg${link}` : link
     }
-  })
+  }).toArray()
 
   return { title, summary, reviews }
 }
@@ -37,13 +40,13 @@ async function getMovies() {
   let html = await getHtml('http://www.shaw.sg/sw_movie.aspx')
   let $ = cheerio.load(html)
 
-  let titles = $('.panelMovieListRow > tr:first > td:2nd-child > a').map(function () {
+  let titles = $('.panelMovieListRow tr:nth-child(1) > td:nth-child(2) > a').map(function () {
     let title = $(this).text()
     let bracketIdx = title.indexOf('[')
-    if (bracketIdx > 0) return title.substring(bracketIdx - 1)
+    if (bracketIdx > 0) return title.substring(0, bracketIdx - 1)
     return title
-  })
-  titles = new Set(titles)
+  }).toArray()
+  titles = Array.from(new Set(titles))
 
   let movies = await getMoviesInfo(titles)
   return movies
