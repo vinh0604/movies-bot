@@ -1,2 +1,5 @@
 node_modules
-functions/bot/main.js
+functions/default/main.js
+functions/default/config.js
+functions/api/main.js
+

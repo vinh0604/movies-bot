@@ -1,5 +1,55 @@
 import request from 'request'
 import cheerio from 'cheerio'
+import moviesFormatter from './moviesFormatter'
+import TelegramBot from './TelegramBot'
+import config from './config'
+import AWS from 'aws-sdk'
+const dynamodb = new AWS.DynamoDB.DocumentClient({ region: 'ap-northeast-1' })
+
+function getCachedMovies() {
+  let params = {
+    TableName: "movies_bot_cache",
+    Key: {
+      type: "movies"
+    }
+  }
+
+  return new Promise(function (resolve, reject) {
+    dynamodb.get(params, function (err, data) {
+      if (err) {
+        reject(err)
+      } else {
+        let cachedData = (data.Item || {}).data
+        resolve(cachedData || {})
+      }
+    })
+  })
+}
+
+function updateCachedMovies(titles, movies) {
+  let data = {}
+  titles.forEach((title, index) => {
+    data[title] = movies[index]
+  });
+
+  let params = {
+    TableName: "movies_bot_cache",
+    Item: {
+      type: "movies",
+      data: data
+    }
+  }
+
+  return new Promise(function(resolve, reject) {
+    dynamodb.put(params, function (err, data) {
+      if (err) {
+        reject(err)
+      } else {
+        resolve(data)
+      }
+    })
+  })
+}
 
 function getHtml(url) {
   return new Promise(function(resolve, reject) {
@@ -11,29 +61,51 @@ function getHtml(url) {
   })
 }
 
-function extractMovieInfo(html) {
-  let $ = cheerio.load(html)
-  let title = $("#rhs_block ._B5d").text()
-  let summary = $("#rhs_block ._tXc").text()
-  let reviews = $("#rhs_block ._Fng").map(function () {
-    let el = $(this)
-    let link = el.find(".fl").attr("href")
+async function getMovieTitleAndUrl(title, cachedMovieData) {
+  let url
+  if (cachedMovieData) {
+    title = cachedMovieData.title
+    url = cachedMovieData.url
+  } else {
+    let json = await getHtml(`http://www.imdb.com/xml/find?json=1&nr=1&tt=on&r=1&q=${encodeURIComponent(title)}`)
+    json = JSON.parse(json)
 
-    return {
-      page: el.find(".fl").text(),
-      rate: el.contents()[0].data,
-      link: link.startsWith("/url") ? `https://www/google.com.sg${link}` : link
-    }
-  }).toArray()
+    if (!json.title_exact && !json.title_popular && !json.title_approx) return { title }
+    let movie = (json.title_exact || json.title_popular || json.title_approx)[0]
+    title = movie.title.replace(/&#x27;/g, "'").replace(/&#x26;/g, "&")
+    url = `http://www.imdb.com/title/${movie.id}`
+  }
 
-  return { title, summary, reviews }
+  return { title, url }
 }
 
-function getMoviesInfo(titles) {
-  let promises = titles.map((title) => { return getHtml(`https://www.google.com.sg/search?q=${title.replace(' ', '+')}+movie`)  })
-  return Promise.all(promises).then(function (htmls) {
-    return htmls.map(extractMovieInfo)
-  })
+async function getMovieInfo(title, cachedMovieData) {
+  title = title.replace(/`/g, "'")
+  try {
+    let url, rating, fetchTime
+    ({ title, url } = await getMovieTitleAndUrl(title, cachedMovieData))
+
+    if (!url) return { title }
+
+    if (cachedMovieData && cachedMovieData.fetchTime && (Date.now() - cachedMovieData.fetchTime <= 86400000)) {
+      fetchTime = cachedMovieData.fetchTime
+      rating = cachedMovieData.rating
+    } else {
+      let html = await getHtml(url)
+      let $ = cheerio.load(html)
+      fetchTime = Date.now()
+      rating = $('[itemprop="ratingValue"]').text() || null
+    }
+
+    return { title, url, rating, fetchTime }
+  } catch (error) {
+    return { title }
+  }
+}
+
+function getMoviesInfo(titles, cachedMovies) {
+  let promises = titles.map((title) => { return getMovieInfo(title, cachedMovies[title]) })
+  return Promise.all(promises)
 }
 
 async function getMovies() {
@@ -41,21 +113,27 @@ async function getMovies() {
   let $ = cheerio.load(html)
 
   let titles = $('.panelMovieListRow tr:nth-child(1) > td:nth-child(2) > a').map(function () {
-    let title = $(this).text()
+    let title = $(this).text().replace('Disney`s ', '').replace('Marvel`s ', '')
     let bracketIdx = title.indexOf('[')
     if (bracketIdx > 0) return title.substring(0, bracketIdx - 1)
     return title
   }).toArray()
   titles = Array.from(new Set(titles))
 
-  let movies = await getMoviesInfo(titles)
+  let cachedMovies = await getCachedMovies()
+  let movies = await getMoviesInfo(titles, cachedMovies)
+  updateCachedMovies(titles, movies)
   return movies
 }
 
 export default async function (event, context) {
   try {
-    let res = await getMovies()
-    context.succeed(res)
+    let movies = await getMovies()
+    // context.succeed(moviesFormatter(movies))
+
+    let telegramBot = new TelegramBot(config.TELEGRAM_API_KEY)
+    await telegramBot.sendMessage({ chat_id: event.chat_id, text: moviesFormatter(movies) })
+    context.succeed({ ok: true })
   } catch (error) {
     context.fail(error)
   }
