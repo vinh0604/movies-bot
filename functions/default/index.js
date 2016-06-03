@@ -126,13 +126,28 @@ async function getMovies() {
   return movies
 }
 
+function getChatIds(records) {
+  return records.map((record) => {
+    try {
+      return JSON.parse(record.Sns.Message).chat_id
+    } catch (err) {
+      return null
+    }
+  }).filter((chat_id) => { return chat_id })
+}
+
 export default async function (event, context) {
   try {
-    let movies = await getMovies()
     // context.succeed(moviesFormatter(movies))
+    let chat_ids = getChatIds(event.Records)
+    if (chat_ids.length === 0) return context.succeed({ ok: true })
 
+    let movies = await getMovies()
     let telegramBot = new TelegramBot(config.TELEGRAM_API_KEY)
-    await telegramBot.sendMessage({ chat_id: event.chat_id, text: moviesFormatter(movies) })
+    let promises = chat_ids.map((chat_id) => {
+      return telegramBot.sendMessage({ chat_id: chat_id, text: moviesFormatter(movies) })
+    })
+    await Promise.all(promises)
     context.succeed({ ok: true })
   } catch (error) {
     context.fail(error)
