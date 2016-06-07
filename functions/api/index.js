@@ -1,9 +1,14 @@
 import AWS from 'aws-sdk'
+import config from '../default/config'
 const sns = new AWS.SNS({
   region: 'ap-northeast-1'
 })
 
 export default async function (event, context) {
+  console.log(event)
+  if (event.token !== config.API_TOKEN) {
+    return context.fail("Invalid token")
+  }
   try {
     let promise = new Promise((resolve, reject) => {
       sns.publish({
