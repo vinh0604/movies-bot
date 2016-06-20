@@ -113,7 +113,7 @@ async function getMovies() {
   let $ = cheerio.load(html)
 
   let titles = $('.panelMovieListRow tr:nth-child(1) > td:nth-child(2) > a').map(function () {
-    let title = $(this).text().replace('Disney`s ', '').replace('Marvel`s ', '')
+    let title = $(this).text().replace('Disney`s ', '').replace('Marvel`s ', '').replace('Disney/Pixar`s ', '')
     let bracketIdx = title.indexOf('[')
     if (bracketIdx > 0) return title.substring(0, bracketIdx - 1)
     return title
