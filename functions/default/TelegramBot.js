@@ -9,7 +9,7 @@ export default class TelegramBot {
     return this._post('setWebhook', { url })
   }
 
-  sendMessage({chat_id, text, display_web_page_preview = true}) {
+  sendMessage({chat_id, text, display_web_page_preview = false}) {
     return this._post('sendMessage', {
       chat_id,
       text,
